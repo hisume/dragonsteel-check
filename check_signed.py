@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 SOURCE_URL = "https://www.dragonsteelbooks.com/search?q=signed"
-SIGNED_RE = re.compile(r"\bElantris\b", re.IGNORECASE)
+SIGNED_RE = re.compile(r"\bsigned\b", re.IGNORECASE)
 WHITESPACE_RE = re.compile(r"\s+")
 
 
