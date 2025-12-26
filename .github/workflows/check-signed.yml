@@ -54,6 +54,7 @@ jobs:
             --issue-title out/issue_title.txt \
             $prev_arg
 
+
       - name: Determine if changes occurred
         id: diff
         run: |

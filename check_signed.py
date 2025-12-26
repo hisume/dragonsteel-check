@@ -200,14 +200,14 @@ def main():
     else:
         output_path = Path(args.output)
 
+    previous_titles = []
+    if args.previous:
+        previous_titles = load_titles(args.previous)
+
     write_json(output_path, payload)
 
     if args.latest:
         write_json(args.latest, payload)
-
-    previous_titles = []
-    if args.previous:
-        previous_titles = load_titles(args.previous)
 
     if args.diff or args.issue_body or args.issue_title:
         added, removed = diff_titles(previous_titles, titles)
