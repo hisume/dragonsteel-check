@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 SOURCE_URL = "https://www.dragonsteelbooks.com/search?q=signed"
@@ -40,6 +41,30 @@ def fetch_html(url):
     )
     with urlopen(req, timeout=30) as response:
         return response.read().decode("utf-8", "ignore")
+
+
+def write_diff_outputs(args, timestamp, titles, previous_titles):
+    if not (args.diff or args.issue_body or args.issue_title):
+        return
+
+    added, removed = diff_titles(previous_titles, titles)
+    diff_payload = {
+        "timestamp": timestamp,
+        "added": added,
+        "removed": removed,
+        "current": titles,
+        "previous": previous_titles,
+    }
+    if args.diff:
+        write_json(args.diff, diff_payload)
+    if args.issue_body:
+        body = format_issue_body(titles, added, removed)
+        Path(args.issue_body).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.issue_body).write_text(body, encoding="utf-8")
+    if args.issue_title:
+        title = format_issue_title(added, removed)
+        Path(args.issue_title).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.issue_title).write_text(title + "\n", encoding="utf-8")
 
 
 def normalize_title(title):
@@ -183,7 +208,19 @@ def main():
     timestamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     file_timestamp = now.strftime("%Y-%m-%dT%H-%M-%SZ")
 
-    html_text = fetch_html(SOURCE_URL)
+    previous_titles = []
+    if args.previous:
+        previous_titles = load_titles(args.previous)
+
+    try:
+        html_text = fetch_html(SOURCE_URL)
+    except HTTPError as exc:
+        if exc.code != 403:
+            raise
+        print("Received HTTP 403 from source; skipping this run.", file=sys.stderr)
+        write_diff_outputs(args, timestamp, previous_titles, previous_titles)
+        return 0
+
     titles = extract_titles(html_text)
     if not titles:
         print("No signed titles found; refusing to write empty snapshot.", file=sys.stderr)
@@ -200,34 +237,12 @@ def main():
     else:
         output_path = Path(args.output)
 
-    previous_titles = []
-    if args.previous:
-        previous_titles = load_titles(args.previous)
-
     write_json(output_path, payload)
 
     if args.latest:
         write_json(args.latest, payload)
 
-    if args.diff or args.issue_body or args.issue_title:
-        added, removed = diff_titles(previous_titles, titles)
-        diff_payload = {
-            "timestamp": timestamp,
-            "added": added,
-            "removed": removed,
-            "current": titles,
-            "previous": previous_titles,
-        }
-        if args.diff:
-            write_json(args.diff, diff_payload)
-        if args.issue_body:
-            body = format_issue_body(titles, added, removed)
-            Path(args.issue_body).parent.mkdir(parents=True, exist_ok=True)
-            Path(args.issue_body).write_text(body, encoding="utf-8")
-        if args.issue_title:
-            title = format_issue_title(added, removed)
-            Path(args.issue_title).parent.mkdir(parents=True, exist_ok=True)
-            Path(args.issue_title).write_text(title + "\n", encoding="utf-8")
+    write_diff_outputs(args, timestamp, titles, previous_titles)
 
     return 0
 
